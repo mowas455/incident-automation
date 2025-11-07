@@ -1,0 +1,154 @@
+{
+  "test_cases": [
+    {
+      "name": "Duplicate Payment - WhatsApp",
+      "request": {
+        "customer_id": "99876",
+        "channel": "whatsapp",
+        "message": "My credit card payment was deducted twice yesterday."
+      },
+      "expected_classification": {
+        "category": "duplicate_payment",
+        "confidence": "> 0.90"
+      },
+      "expected_flow": [
+        "Incident created",
+        "LLM classifies as duplicate_payment",
+        "Ticket created (TKT-xxx)",
+        "Email sent: 'Ticket created, investigating'",
+        "SMS sent: Same message",
+        "24h timer started"
+      ]
+    },
+    {
+      "name": "Fraud Report - Email",
+      "request": {
+        "customer_id": "55555",
+        "channel": "email",
+        "message": "I see unauthorized transaction of $500 that I didn't approve. This is fraud!"
+      },
+      "expected_classification": {
+        "category": "fraud_report",
+        "confidence": "> 0.95"
+      },
+      "expected_flow": [
+        "Incident created",
+        "LLM classifies as fraud_report (high confidence)",
+        "Could be escalated to priority queue in production",
+        "Multi-channel notification sent",
+        "Reminder scheduled"
+      ]
+    },
+    {
+      "name": "Failed Payment with Charge - SMS",
+      "request": {
+        "customer_id": "12345",
+        "channel": "sms",
+        "message": "Payment transaction failed but money was still deducted from my account"
+      },
+      "expected_classification": {
+        "category": "failed_payment",
+        "confidence": "> 0.85"
+      },
+      "expected_flow": [
+        "Incident created",
+        "LLM classifies as failed_payment",
+        "Ticket references the failed transaction",
+        "Notifications sent",
+        "24h reminder for refund processing"
+      ]
+    },
+    {
+      "name": "Refund Request",
+      "request": {
+        "customer_id": "77777",
+        "channel": "email",
+        "message": "I want to refund this $200 charge for the premium subscription I don't need anymore"
+      },
+      "expected_classification": {
+        "category": "refund_request",
+        "confidence": "> 0.90"
+      },
+      "expected_flow": [
+        "Incident created",
+        "LLM classifies as refund_request",
+        "Could auto-trigger refund workflow",
+        "Notifications confirm receipt",
+        "Follow-up on resolution"
+      ]
+    },
+    {
+      "name": "Account Locked",
+      "request": {
+        "customer_id": "88888",
+        "channel": "whatsapp",
+        "message": "My account is locked and I can't log in. I haven't done anything wrong"
+      },
+      "expected_classification": {
+        "category": "account_locked",
+        "confidence": "> 0.92"
+      }
+    },
+    {
+      "name": "Statement Error",
+      "request": {
+        "customer_id": "33333",
+        "channel": "email",
+        "message": "My account statement shows a balance of $100 but I know I have $500. There's a discrepancy"
+      },
+      "expected_classification": {
+        "category": "statement_error",
+        "confidence": "> 0.88"
+      }
+    },
+    {
+      "name": "Vague Message",
+      "request": {
+        "customer_id": "44444",
+        "channel": "sms",
+        "message": "help"
+      },
+      "expected_classification": {
+        "category": "other",
+        "confidence": "0.5-0.7"
+      }
+    }
+  ],
+  "curl_examples": {
+    "duplicate_payment": "curl -X POST http://localhost:8000/api/incidents -H 'Content-Type: application/json' -d '{\"customer_id\": \"99876\", \"channel\": \"whatsapp\", \"message\": \"My credit card payment was deducted twice yesterday.\"}'",
+    "fraud": "curl -X POST http://localhost:8000/api/incidents -H 'Content-Type: application/json' -d '{\"customer_id\": \"55555\", \"channel\": \"email\", \"message\": \"I see unauthorized transaction of $500 that I did not authorize. This is fraud!\"}'",
+    "failed_payment": "curl -X POST http://localhost:8000/api/incidents -H 'Content-Type: application/json' -d '{\"customer_id\": \"12345\", \"channel\": \"sms\", \"message\": \"Payment transaction failed but money was still deducted from my account\"}'",
+    "get_incident": "curl http://localhost:8000/api/incidents/{incident_id}",
+    "customer_history": "curl http://localhost:8000/api/incidents/customer/99876",
+    "resolve_incident": "curl -X PUT http://localhost:8000/api/incidents/{incident_id}/resolve",
+    "get_stats": "curl http://localhost:8000/api/stats",
+    "health_check": "curl http://localhost:8000/health"
+  },
+  "swagger_testing": {
+    "instructions": [
+      "1. Open http://localhost:8000/docs",
+      "2. Click 'POST /api/incidents'",
+      "3. Click 'Try it out'",
+      "4. Copy any test case from above",
+      "5. Click 'Execute'",
+      "6. See response with incident_id, ticket_id, classification"
+    ],
+    "expected_response": {
+      "incident_id": "uuid-string",
+      "ticket_id": "TKT-xxxxxxxx",
+      "status": "open",
+      "classification": "duplicate_payment",
+      "confidence": 0.96,
+      "message": "Incident received and ticket created. Acknowledgments sent via email and SMS."
+    }
+  },
+  "classification_categories": {
+    "duplicate_payment": "Customer charged twice for same transaction",
+    "failed_payment": "Payment failed but charged anyway, or payment didn't go through",
+    "fraud_report": "Suspected unauthorized transaction",
+    "refund_request": "Customer requesting money back",
+    "account_locked": "Account access issues",
+    "statement_error": "Discrepancy in statement/balance",
+    "other": "Doesn't fit above categories"
+  }
+}
