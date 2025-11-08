@@ -2,7 +2,7 @@
 
 ## Overview
 
-A microservice that automates customer support workflows across multiple channels (Email, SMS, WhatsApp). The system receives incidents, classifies them intelligently using Claude LLM, creates tickets, and orchestrates multi-channel notifications with automatic reminders.
+A microservice that automates customer support workflows across multiple channels (Email, SMS, WhatsApp). The system receives incidents, classifies them intelligently using OpenAI GPT-3.5, creates tickets, and orchestrates multi-channel notifications with automatic reminders.
 
 ## Pipeline Architecture
 ```
@@ -15,8 +15,8 @@ A microservice that automates customer support workflows across multiple channel
    ├─ Generate unique incident_id
    └─ Log incoming data
 
-2. LLM CLASSIFICATION (Claude)
-   ├─ Send message to Claude with predefined categories
+2. LLM CLASSIFICATION (OpenAI GPT-3.5)
+   ├─ Send message to OpenAI with predefined categories
    ├─ Categories: duplicate_payment, failed_payment, fraud, refund, etc.
    ├─ Receive: category, confidence score, reasoning
    └─ Store classification in database
@@ -47,10 +47,12 @@ Database stores: incidents, notifications, reminders
 pip install -r requirements.txt
 ```
 
-### 2. Set Environment (Optional)
+### 2. Set Environment Variables
+Create a `.env` file in the project root:
 ```bash
-export ANTHROPIC_API_KEY="your-api-key"  # Claude will auto-detect from env
+OPENAI_API_KEY=your-openai-api-key-here
 ```
+Get your API key from https://platform.openai.com/api-keys
 
 ### 3. Run the Server
 ```bash
@@ -167,7 +169,7 @@ sent_at         TIMESTAMP            (auto)
 
 ## Key Features
 
-✅ **LLM-Powered Classification**: Claude intelligently categorizes issues (duplicate_payment, fraud, refund, etc.)
+✅ **LLM-Powered Classification**: OpenAI GPT-3.5 intelligently categorizes issues (duplicate_payment, fraud, refund, etc.)
 
 ✅ **Multi-Channel Delivery**: Email + SMS acknowledgments (simulated, extensible to real providers)
 
@@ -266,10 +268,23 @@ incident-automation/
 - Add request validation & sanitization
 - Deploy with production WSGI server (gunicorn)
 
+## Troubleshooting
+
+### Classification Returns "other" for Everything
+If all incidents are classified as "other", check:
+1. **OpenAI API Key**: Ensure `.env` file exists with valid `OPENAI_API_KEY`
+2. **API Quota**: Check https://platform.openai.com/account/usage for quota/billing status
+3. **Console Logs**: Look for error messages like "❌ OpenAI Quota Exceeded"
+
+### Common Issues
+- **Quota Exceeded**: Add billing info at https://platform.openai.com/account/billing
+- **Invalid API Key**: Generate new key at https://platform.openai.com/api-keys
+- **Rate Limit**: Wait a few seconds between requests or upgrade plan
+
 ## Author Notes
 
 This solution demonstrates:
-1. **AI integration**: Effective use of Claude for intelligent classification
+1. **AI integration**: Effective use of OpenAI for intelligent classification
 2. **Async workflows**: Background threads for 24h reminders
 3. **System design**: Clean separation of concerns, modular functions
 4. **Database design**: Normalized schema for incidents & notifications

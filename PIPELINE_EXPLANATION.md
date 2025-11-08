@@ -17,7 +17,7 @@
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 2: LLM CLASSIFICATION (Claude)                                    │
+│  STEP 2: LLM CLASSIFICATION (Gemini)                                    │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │ Input: "My credit card was charged twice"                          │ │
 │  │ System Prompt: "Classify into: duplicate_payment, fraud, ..."      │ │
@@ -234,15 +234,15 @@ notifications:
 
 ## Why This Design?
 
-| Design Choice | Why |
-|---|---|
-| **Claude LLM** | Better than rule-based: handles ambiguous cases, learns from examples |
-| **Background threads** | Async reminder doesn't block API responses |
+| Design Choice                   | Why |
+|---------------------------------|---|
+| **Gemini LLM**                  | Better than rule-based: handles ambiguous cases, learns from examples |
+| **Background threads**          | Async reminder doesn't block API responses |
 | **Multi-channel notifications** | Real systems need Email + SMS failover (WhatsApp can fail) |
-| **Mock API fallback** | Graceful degradation if external ticket API is down |
-| **SQLite** | Simple demo that could scale to PostgreSQL in production |
-| **Audit trail** | Every notification logged for compliance/debugging |
-| **REST API** | Standard pattern for webhooks/integrations |
+| **Mock API fallback**           | Graceful degradation if external ticket API is down |
+| **SQLite**                      | Simple demo that could scale to PostgreSQL in production |
+| **Audit trail**                 | Every notification logged for compliance/debugging |
+| **REST API**                    | Standard pattern for webhooks/integrations |
 
 ---
 
@@ -251,7 +251,7 @@ notifications:
 This demo code shows understanding of:
 - ✅ Asynchronous workflows (background tasks)
 - ✅ Multi-channel orchestration (Email/SMS/WhatsApp)
-- ✅ LLM integration (Claude API)
+- ✅ LLM integration (Gemini  API)
 - ✅ Graceful error handling (API fallbacks)
 - ✅ Data persistence (SQLite → PostgreSQL)
 - ✅ Audit trails (notifications table)

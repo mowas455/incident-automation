@@ -11,13 +11,13 @@ import uuid
 import uvicorn
 from dotenv import load_dotenv
 import os
-import openai
+import google.generativeai as genai
 
 # Load .env file
 load_dotenv()
 
-# Set OpenAI API key
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Set Google API key
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -173,9 +173,8 @@ def send_multi_channel(incident_id: str, customer_id: str, ticket_id: str, chann
 # ============================================================================
 # LLM CLASSIFICATION (MAIN INTELLIGENCE)
 # ============================================================================
-
 def classify_incident(message: str) -> dict:
-    """Use OpenAI to classify the incident and extract details"""
+    """Use Google Gemini to classify the incident and extract details"""
 
     prompt = f"""You are an incident classification expert for a fintech customer service team.
 
@@ -192,25 +191,47 @@ Available Categories:
 - statement_error: There is a discrepancy in the account statement or balance
 - other: The message does not fit into any of the above categories
 
-You MUST respond with ONLY valid JSON in this exact format, no other text:
-{{"category": "one_of_the_categories_above", "confidence": 0.95, "reason": "2-3 word explanation"}}
-
-Important:
-- category must be exactly one of the listed categories
-- confidence must be a number between 0.0 and 1.0
-- reason must be 2-3 words maximum
-- Do NOT include any text outside the JSON"""
+Respond with ONLY valid JSON, no markdown, no extra text:
+{{"category": "one_of_the_categories_above", "confidence": 0.95, "reason": "2-3 word explanation"}}"""
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=100
+        # Use the free gemini-2.0-flash model
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=200,
+            )
         )
 
-        response_text = response["choices"][0]["message"]["content"].strip()
-        print(f"[DEBUG] OpenAI Response: {response_text}")
+        # Check if response is empty
+        if not response or not response.candidates or len(response.candidates) == 0:
+            print(f"❌ Empty response from Gemini")
+            return {
+                "category": "other",
+                "confidence": 0.3,
+                "reason": "Empty response"
+            }
+
+        # Get text safely
+        if not response.candidates[0].content or not response.candidates[0].content.parts:
+            print(f"❌ No content in response")
+            return {
+                "category": "other",
+                "confidence": 0.3,
+                "reason": "No content"
+            }
+
+        response_text = response.candidates[0].content.parts[0].text.strip()
+        print(f"[DEBUG] Google Gemini Response: {response_text}")
+
+        # Remove markdown code blocks if present
+        if response_text.startswith("```"):
+            # Remove ```json or ``` at start
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+
+        print(f"[DEBUG] Cleaned Response: {response_text}")
 
         # Try to parse JSON
         result = json.loads(response_text)
@@ -226,14 +247,23 @@ Important:
             }
 
     except json.JSONDecodeError as e:
-        print(f"JSON Parse Error: {e}")
+        print(f"❌ JSON Parse Error: {e}")
+        print(f"   Response was: {response_text if 'response_text' in locals() else 'N/A'}")
         return {
             "category": "other",
             "confidence": 0.3,
             "reason": "Parse failed"
         }
+    except IndexError as e:
+        print(f"❌ Index Error (Empty Response): {e}")
+        return {
+            "category": "other",
+            "confidence": 0.3,
+            "reason": "Empty response from API"
+        }
     except Exception as e:
-        print(f"OpenAI Error: {e}")
+        print(f"❌ Google Gemini API Error: {e}")
+        print(f"   Error type: {type(e).__name__}")
         return {
             "category": "other",
             "confidence": 0.3,
