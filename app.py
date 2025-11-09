@@ -182,14 +182,28 @@ Classify the following customer message into ONE category and provide a confiden
 
 Customer Message: "{message}"
 
-Available Categories:
-- duplicate_payment: Customer was charged twice for the same transaction
-- failed_payment: Payment failed but customer was still charged
-- fraud_report: Suspected unauthorized or fraudulent transaction
-- refund_request: Customer is requesting a refund or money back
-- account_locked: Customer cannot access their account
-- statement_error: There is a discrepancy in the account statement or balance
-- other: The message does not fit into any of the above categories
+CLASSIFICATION TASK:
+Analyze the customer message and classify it into ONE of these categories:
+
+1. duplicate_payment - Customer was charged multiple times for the same transaction/service
+   Examples: "charged twice", "double billed", "money deducted twice"
+
+2. failed_payment - Payment transaction failed but money was still deducted from account
+   Examples: "payment failed but still charged", "transaction declined but money gone"
+
+3. fraud_report - Customer suspects unauthorized or fraudulent activity
+   Examples: "unauthorized transaction", "I didn't make this purchase", "suspicious activity"
+
+4. refund_request - Customer explicitly requests a refund or money back
+   Examples: "I want a refund", "please reverse the charge", "return my money"
+
+5. account_locked - Customer cannot access their account
+   Examples: "can't log in", "account locked", "password not working"
+
+6. statement_error - Discrepancy in account balance or statement
+   Examples: "balance is wrong", "statement doesn't match", "missing transaction"
+
+7. other - Message doesn't fit any of the above categories
 
 Respond with ONLY valid JSON, no markdown, no extra text:
 {{"category": "one_of_the_categories_above", "confidence": 0.95, "reason": "2-3 word explanation"}}"""
