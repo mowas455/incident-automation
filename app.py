@@ -15,6 +15,9 @@ import google.generativeai as genai
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
+
 # Load .env file
 load_dotenv()
 
@@ -77,6 +80,8 @@ class IncidentDetail(BaseModel):
     message: str
     classification: str
     confidence: float
+    sentiment: str              # ← ADD THIS
+    polarity: float             # ← ADD THIS
     ticket_id: str
     status: str
     created_at: str
@@ -110,6 +115,8 @@ def init_db():
         message TEXT NOT NULL,
         classification TEXT NOT NULL,
         confidence REAL NOT NULL,
+        sentiment TEXT,
+        polarity REAL,
         ticket_id TEXT,
         status TEXT DEFAULT 'open',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -178,16 +185,10 @@ def send_email(recipient_email: str, incident_id: str, message: str) -> bool:
 
         body = f"""
         Hello,
-
-        Thank you for reporting this issue to us.
-
-        Incident ID: {incident_id}
-        Status: Your ticket has been created and is being investigated.
-
-        Message:
-        {message}
-
-        We will follow up with you within 24 hours.
+        
+                Message:{message}
+    
+            We will follow up with you within 24 hours.
 
         Best regards,
         Customer Support Team
@@ -249,10 +250,45 @@ def send_multi_channel(incident_id: str, customer_id: str,
     for channel in channels:
         send_notification(incident_id, channel, message, customer_email=customer_email)
 
+## ============================================================================
+# Sentiment Analysis
+# ============================================================================
+
+def analyze_sentiment(message: str) -> dict:
+    """Analyze customer sentiment using VADER"""
+
+    try:
+        try:
+            nltk.data.find('sentiment/vader_lexicon')
+        except LookupError:
+            nltk.download('vader_lexicon', quiet=True)
+
+        sia = SentimentIntensityAnalyzer()
+        scores = sia.polarity_scores(message)
+        compound = scores['compound']
+
+        if compound >= 0.05:
+            sentiment = "positive"
+        elif compound <= -0.05:
+            sentiment = "negative"
+        else:
+            sentiment = "neutral"
+
+        return {
+            "sentiment": sentiment,
+            "compound": round(compound, 2)
+        }
+    except Exception as e:
+        print(f"❌ Sentiment Analysis Error: {e}")
+        return {
+            "sentiment": "neutral",
+            "compound": 0.0
+        }
 
 # ============================================================================
 # LLM CLASSIFICATION (MAIN INTELLIGENCE)
 # ============================================================================
+
 def classify_incident(message: str) -> dict:
     """Use Google Gemini to classify the incident and extract details"""
 
@@ -482,8 +518,15 @@ async def create_incident(incident_data: IncidentRequest):
     print(f"Message: {message}")
     print(f"{'=' * 70}")
 
-    # Step 1: Classify with LLM
-    print("\n[STEP 1] Classifying incident with Google Gemini...")
+    # Step 1: Analyze sentiment
+    print("\n[STEP 1] Analyzing customer sentiment...")
+    sentiment_result = analyze_sentiment(message)
+    sentiment = sentiment_result['sentiment']
+    polarity = sentiment_result['compound']
+    print(f"✓ Sentiment: {sentiment} (polarity: {polarity})")
+
+    # Step 2: Classify with LLM
+    print("\n[STEP 2] Classifying incident with Google Gemini...")
     classification_result = classify_incident(message)
 
     category = classification_result['category']
@@ -494,30 +537,30 @@ async def create_incident(incident_data: IncidentRequest):
     print(f"✓ Confidence: {confidence}")
     print(f"✓ Reason: {reason}")
 
-    # Step 2: Create ticket
-    print("\n[STEP 2] Creating ticket...")
+    # Step 3: Create ticket
+    print("\n[STEP 3] Creating ticket...")
     ticket_id = create_ticket_mock(incident_id, category, message)
 
-    # Step 3: Store in database
-    print("\n[STEP 3] Storing incident in database...")
+    # Step 4: Store in database
+    print("\n[STEP 4] Storing incident in database...")
     conn = sqlite3.connect('incidents.db')
     c = conn.cursor()
     c.execute('''INSERT INTO incidents 
-                 (id, customer_id, channel, message, classification, confidence, ticket_id, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'open')''',
-              (incident_id, customer_id, channel, message, category, confidence, ticket_id))
+                 (id, customer_id, channel, message, classification, confidence, sentiment, polarity, ticket_id, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')''',
+              (incident_id, customer_id, channel, message, category, confidence, sentiment, polarity, ticket_id))
     conn.commit()
     conn.close()
     print("✓ Incident stored")
 
-    # Step 4: Send multi-channel notifications
-    print("\n[STEP 4] Sending multi-channel notifications...")
+    # Step 5: Send multi-channel notifications
+    print("\n[STEP 5] Sending multi-channel notifications...")
     send_multi_channel(incident_id, customer_id, ticket_id,
                        customer_email=incident_data.email,
                        channels=['email', 'sms'])
 
-    # Step 5: Schedule 24-hour reminder
-    print("\n[STEP 5] Scheduling 24-hour reminder...")
+    # Step 6: Schedule 24-hour reminder
+    print("\n[STEP 6] Scheduling 24-hour reminder...")
     schedule_24h_reminder(incident_id, incident_data.email, channel)
     print("✓ Reminder scheduled")
 
@@ -527,7 +570,7 @@ async def create_incident(incident_data: IncidentRequest):
         "status": "open",
         "classification": category,
         "confidence": confidence,
-        "message": "Incident received and ticket created. Acknowledgments sent via email and SMS."
+        "message": f"Incident received and ticket created. Sentiment: {sentiment}. Acknowledgments sent via email and SMS."
     }
 
     print(f"\n[SUCCESS] Response: {json.dumps(response, indent=2)}")
