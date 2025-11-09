@@ -12,7 +12,9 @@ import uvicorn
 from dotenv import load_dotenv
 import os
 import google.generativeai as genai
-
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 # Load .env file
 load_dotenv()
 
@@ -45,9 +47,9 @@ app.add_middleware(
 class IncidentRequest(BaseModel):
     """Customer incident submission"""
     customer_id: str = Field(..., description="Unique customer identifier", example="99876")
-    message: str = Field(..., description="Customer's issue description",
-                         example="My credit card payment was deducted twice yesterday.")
+    message: str = Field(..., description="Customer's issue description", example="My credit card payment was deducted twice yesterday.")
     channel: str = Field(default="email", description="Communication channel", example="whatsapp")
+    email: str = Field(default=None, description="Customer email address", example="customer@example.com")  # ← ADD THIS
 
 
 class ClassificationResult(BaseModel):
@@ -136,10 +138,11 @@ init_db()
 # MOCK NOTIFICATION SYSTEM
 # ============================================================================
 
-def send_notification(incident_id: str, channel: str, message: str) -> str:
-    """Simulate sending notifications across channels"""
+def send_notification(incident_id: str, channel: str, message: str, customer_email: str = None) -> str:
+    """Send notifications across different channels"""
     notification_id = str(uuid.uuid4())
 
+    # Store in database
     conn = sqlite3.connect('incidents.db')
     c = conn.cursor()
     c.execute('''INSERT INTO notifications (id, incident_id, channel, message, status)
@@ -148,11 +151,88 @@ def send_notification(incident_id: str, channel: str, message: str) -> str:
     conn.commit()
     conn.close()
 
+    # Send actual notification based on channel
+    if channel.lower() == 'email' and customer_email:
+        send_email(customer_email, incident_id, message)
+    elif channel.lower() == 'sms':
+        send_sms_mock(message)
+    elif channel.lower() == 'whatsapp':
+        send_whatsapp_mock(message)
+
     print(f"[{channel.upper()}] Sent to customer: {message[:50]}...")
     return notification_id
 
 
-def send_multi_channel(incident_id: str, customer_id: str, ticket_id: str, channels: List[str] = None):
+def send_email(recipient_email: str, incident_id: str, message: str) -> bool:
+    """Send actual email to customer"""
+    try:
+        sender_email = os.getenv("SENDER_EMAIL")
+        sender_password = os.getenv("SENDER_PASSWORD")
+
+        if not sender_email or not sender_password:
+            print(f"⚠️  Email credentials not configured in .env")
+            return False
+
+        # Create email
+        subject = f"Incident Update - Ticket {incident_id}"
+
+        body = f"""
+        Hello,
+
+        Thank you for reporting this issue to us.
+
+        Incident ID: {incident_id}
+        Status: Your ticket has been created and is being investigated.
+
+        Message:
+        {message}
+
+        We will follow up with you within 24 hours.
+
+        Best regards,
+        Customer Support Team
+        """
+
+        # Setup email
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = recipient_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Send email via Gmail SMTP
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(sender_email, sender_password)
+        server.send_message(msg)
+        server.quit()
+
+        print(f"✅ Email sent successfully to {recipient_email}")
+        return True
+
+    except smtplib.SMTPAuthenticationError:
+        print(f"❌ Email Auth Error: Check SENDER_EMAIL and SENDER_PASSWORD in .env")
+        return False
+    except Exception as e:
+        print(f"❌ Email Error: {e}")
+        return False
+
+
+def send_sms_mock(message: str) -> bool:
+    """Mock SMS sending (for production, use Twilio)"""
+    print(f"📱 SMS (Mock): {message[:50]}...")
+    return True
+
+
+def send_whatsapp_mock(message: str) -> bool:
+    """Mock WhatsApp sending (for production, use Twilio)"""
+    print(f"💬 WhatsApp (Mock): {message[:50]}...")
+    return True
+
+
+def send_multi_channel(incident_id: str, customer_id: str,
+                       ticket_id: str,
+                       customer_email: str = None,
+                       channels: List[str] = None):
     """Send acknowledgment across multiple channels"""
     if channels is None:
         channels = ['email', 'sms']
@@ -167,7 +247,7 @@ def send_multi_channel(incident_id: str, customer_id: str, ticket_id: str, chann
     """
 
     for channel in channels:
-        send_notification(incident_id, channel, message)
+        send_notification(incident_id, channel, message, customer_email=customer_email)
 
 
 # ============================================================================
@@ -318,7 +398,7 @@ def create_ticket_mock(incident_id: str, classification: str, message: str) -> s
 reminder_threads = {}
 
 
-def schedule_24h_reminder(incident_id: str, customer_id: str):
+def schedule_24h_reminder(incident_id: str, c_email: str, channel: str):
     """Schedule a reminder after 24 hours if ticket remains open"""
 
     def check_and_remind():
@@ -335,7 +415,7 @@ def schedule_24h_reminder(incident_id: str, customer_id: str):
             Reminder: Your support ticket {incident_id} is still open.
             We're working on resolving your issue. Thank you for your patience.
             """
-            send_notification(incident_id, 'email', reminder_msg)
+            send_notification(incident_id, channel, reminder_msg, customer_email=c_email)
 
             conn = sqlite3.connect('incidents.db')
             c = conn.cursor()
@@ -380,6 +460,7 @@ async def create_incident(incident_data: IncidentRequest):
       "customer_id": "99876",
       "channel": "whatsapp",
       "message": "My credit card payment was deducted twice yesterday."
+      "email": "customer@example.com"
     }
 ```
     """
@@ -401,7 +482,7 @@ async def create_incident(incident_data: IncidentRequest):
     print(f"{'=' * 70}")
 
     # Step 1: Classify with LLM
-    print("\n[STEP 1] Classifying incident with OpenAI...")
+    print("\n[STEP 1] Classifying incident with Google Gemini...")
     classification_result = classify_incident(message)
 
     category = classification_result['category']
@@ -430,11 +511,13 @@ async def create_incident(incident_data: IncidentRequest):
 
     # Step 4: Send multi-channel notifications
     print("\n[STEP 4] Sending multi-channel notifications...")
-    send_multi_channel(incident_id, customer_id, ticket_id, channels=['email', 'sms'])
+    send_multi_channel(incident_id, customer_id, ticket_id,
+                       customer_email=incident_data.email,
+                       channels=['email', 'sms'])
 
     # Step 5: Schedule 24-hour reminder
     print("\n[STEP 5] Scheduling 24-hour reminder...")
-    schedule_24h_reminder(incident_id, customer_id)
+    schedule_24h_reminder(incident_id, incident_data.email, channel)
     print("✓ Reminder scheduled")
 
     response = {
