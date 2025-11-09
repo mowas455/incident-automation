@@ -1,225 +1,166 @@
-# Quick Start Guide
+# Quick Start - 5 Minutes
 
-## Installation & Setup (2 minutes)
+## 1️⃣ Install & Run
+
 ```bash
-# Navigate to project directory
 cd incident-automation
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Set API key (Claude auto-detects from env)
-export ANTHROPIC_API_KEY="sk-ant-..."
-
-# Run server (FastAPI + Uvicorn)
 python app.py
 ```
 
-Server starts at: `http://localhost:8000`
-
-**🎉 Open Swagger UI: http://localhost:8000/docs** for interactive testing!
+**✅ See:** `Uvicorn running on http://0.0.0.0:8000`
 
 ---
 
-## Testing (5 minutes)
+## 2️⃣ Test It
 
-### Test 1: Create Incident via Swagger (Recommended)
-1. Open http://localhost:8000/docs
-2. Click "POST /api/incidents"
-3. Click "Try it out"
-4. Enter JSON and click "Execute"
+Open: **http://localhost:8000/docs**
 
-### Test 1b: Create Incident via cURL
-```bash
-curl -X POST http://localhost:8000/api/incidents \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_id": "99876",
-    "channel": "whatsapp",
-    "message": "My credit card payment was deducted twice yesterday."
-  }'
-```
+Click **"POST /api/incidents"** → **"Try it out"**
 
-**Expected Output:**
+Enter:
 ```json
 {
-  "incident_id": "a1b2c3d4-e5f6-...",
-  "ticket_id": "TKT-xyz123",
-  "status": "open",
-  "classification": "duplicate_payment",
-  "confidence": 0.96,
-  "message": "Incident received and ticket created. Acknowledgments sent via email and SMS."
+  "customer_id": "99876",
+  "channel": "email",
+  "message": "I was charged twice",
+  "email": "test@example.com"
 }
 ```
 
-### Test 2: Get Incident Details
-```bash
-curl http://localhost:8000/api/incidents/a1b2c3d4-e5f6-...
-```
+Click **"Execute"**
 
-### Test 3: Get Customer's All Incidents
-```bash
-curl http://localhost:8000/api/incidents/customer/99876
-```
-
-### Test 4: Get Statistics
-```bash
-curl http://localhost:8000/api/stats
-```
-
-### Test 5: Resolve Incident
-```bash
-curl -X PUT http://localhost:8000/api/incidents/a1b2c3d4-e5f6-.../resolve
-```
-
-### Test 6: Health Check
-```bash
-curl http://localhost:8000/health
-```
+✅ **See response with incident_id and classification**
 
 ---
 
-## Database
+## 3️⃣ Check Database
 
-SQLite database is created automatically on first run: `incidents.db`
-
-**View data:**
 ```bash
-sqlite3 incidents.db
-> SELECT * FROM incidents;
-> SELECT * FROM notifications;
-> .quit
+sqlite3 incidents.db "SELECT * FROM incidents;"
 ```
+
+✅ **See your incident stored**
 
 ---
 
-## Logs & Debugging
+## Done! ✨
 
-The application prints detailed logs to console:
-```
-======================================================================
-[INCIDENT RECEIVED] ID: a1b2c3d4-e5f6-...
-Customer: 99876 | Channel: whatsapp
-Message: My credit card payment was deducted twice yesterday.
-======================================================================
-
-[STEP 1] Classifying incident with LLM...
-✓ Category: duplicate_payment
-✓ Confidence: 0.96
-✓ Reason: Clear indication of duplicate charge
-
-[STEP 2] Creating ticket...
-✓ Ticket created: TKT-xyz123
-
-[STEP 3] Storing incident in database...
-✓ Incident stored
-
-[STEP 4] Sending multi-channel notifications...
-[EMAIL] Sent to customer: Thank you...
-[SMS] Sent to customer: Thank you...
-
-[STEP 5] Scheduling 24-hour reminder...
-✓ Reminder scheduled
-
-[SUCCESS] Response: {...}
-```
+Your API is working. All 7 endpoints are live at: **http://localhost:8000/docs**
 
 ---
 
-## Common Issues
+## Common Fixes
 
-### Issue: "ModuleNotFoundError: No module named 'fastapi'"
-**Solution:**
+**Port in use?**
 ```bash
-pip install fastapi uvicorn pydantic anthropic requests
+lsof -i :8000 | grep LISTEN | awk '{print $2}' | xargs kill -9
 ```
 
-### Issue: "ANTHROPIC_API_KEY not found"
-**Solution:**
+**Dependencies missing?**
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-echo $ANTHROPIC_API_KEY  # Verify it's set
+pip install -r requirements.txt
 ```
 
-### Issue: "Port 8000 already in use"
-**Solution:**
-```bash
-lsof -i :8000
-kill -9 <PID>
-```
-
-Or run on different port by editing app.py last line:
-```python
-uvicorn.run(app, host="0.0.0.0", port=8001)
-```
-
-### Issue: "Database error"
-**Solution:**
+**Database broken?**
 ```bash
 rm incidents.db
-python app.py  # Recreates it
+python app.py
 ```
 
 ---
 
-## API Endpoints
+## All Endpoints
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| POST | /api/incidents | Create incident |
-| GET | /api/incidents/{id} | Fetch incident |
-| GET | /api/incidents/customer/{id} | Customer history |
-| PUT | /api/incidents/{id}/resolve | Mark resolved |
-| GET | /api/notifications/{id} | View notifications |
-| GET | /api/stats | Statistics |
-| GET | /health | Health check |
-
----
-
-## Classification Categories
-
-The LLM classifies incidents into these categories:
-
-- `duplicate_payment` - Charged 2+ times
-- `failed_payment` - Failed but charged
-- `fraud_report` - Unauthorized transaction
-- `refund_request` - Customer wants money back
-- `account_locked` - Can't access account
-- `statement_error` - Balance discrepancy
-- `other` - Doesn't fit above
+| What | URL |
+|------|-----|
+| 📝 Create incident | `POST /api/incidents` |
+| 📖 Get incident | `GET /api/incidents/{id}` |
+| 👤 Customer history | `GET /api/incidents/customer/{id}` |
+| ✅ Resolve incident | `PUT /api/incidents/{id}/resolve` |
+| 📧 View notifications | `GET /api/notifications/{id}` |
+| 📊 Statistics | `GET /api/stats` |
+| 💚 Health check | `GET /health` |
 
 ---
 
-## Next Steps
+## What Happens (6 Steps)
 
-1. ✅ Run `python app.py`
-2. ✅ Open http://localhost:8000/docs
-3. ✅ Test endpoints via Swagger UI
-4. ✅ Check database: `sqlite3 incidents.db`
-5. ✅ Read PROMPT_LOG.md for interview prep
-6. ✅ Review PIPELINE_EXPLANATION.md to understand flow
+1. **Receive** - Customer sends message
+2. **Classify** - Google Gemini AI analyzes it
+3. **Ticket** - Create support ticket (TKT-xxx)
+4. **Store** - Save to database
+5. **Email** - Send real email to customer
+6. **Remind** - Schedule 24-hour reminder
 
----
-
-## For Interview
-
-When evaluators ask "Walk me through your code":
-
-1. Show app.py and explain create_incident() function
-2. Walk through each step (classify → ticket → notify → remind)
-3. Demonstrate Swagger UI
-4. Explain why you chose FastAPI (see FASTAPI_VS_FLASK.md)
-5. Discuss how you used Claude (see PROMPT_LOG.md)
+**Total time:** ~2 seconds ⚡
 
 ---
 
-## Success Indicator
+## Test Different Scenarios
 
-When everything works, you'll see:
+**Duplicate Payment:**
+```json
+{
+  "customer_id": "1",
+  "channel": "email",
+  "message": "I was charged twice",
+  "email": "user@example.com"
+}
+```
 
-✅ Terminal: "Uvicorn running on http://0.0.0.0:8000"
-✅ Browser: Swagger UI loads at localhost:8000/docs
-✅ Swagger: All 7 endpoints listed with descriptions
-✅ Test: POST endpoint executes and returns incident_id
+**Fraud:**
+```json
+{
+  "customer_id": "2",
+  "channel": "email",
+  "message": "I see unauthorized transaction",
+  "email": "user@example.com"
+}
+```
 
-If all 4 work → **Everything is running correctly!**
+**Refund:**
+```json
+{
+  "customer_id": "3",
+  "channel": "email",
+  "message": "I want a refund",
+  "email": "user@example.com"
+}
+```
+
+---
+
+## View Results
+
+```bash
+# All incidents
+curl http://localhost:8000/api/stats
+
+# One customer
+curl http://localhost:8000/api/incidents/customer/1
+
+# One incident
+curl http://localhost:8000/api/incidents/{incident_id}
+```
+
+---
+
+## Next: Interview Prep
+
+Read in this order:
+1. **FASTAPI_GUIDE.md** - How to demo it
+2. **PIPELINE_EXPLANATION.md** - How it works
+3. **PROMPT_LOG.md** - Your decisions
+
+---
+
+## ✅ Success Checklist
+
+- [ ] App running (`Uvicorn running...`)
+- [ ] Swagger UI loads (http://localhost:8000/docs)
+- [ ] Create incident works
+- [ ] Data in database
+- [ ] Email sent to recipient
+
+**All 5 done = Ready for interview! 🚀**

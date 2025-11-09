@@ -403,6 +403,7 @@ def schedule_24h_reminder(incident_id: str, c_email: str, channel: str):
 
     def check_and_remind():
         time.sleep(86400)  # Wait 24 hours
+        # time.sleep(40)
 
         conn = sqlite3.connect('incidents.db')
         c = conn.cursor()

@@ -1,174 +1,282 @@
-# FastAPI Version - Incident Automation
+# FastAPI Guide - Incident Automation
 
-## Key Differences from Flask
+## What is FastAPI?
 
-| Feature | Flask | FastAPI |
-|---------|-------|---------|
-| Documentation | Manual | Automatic Swagger/OpenAPI |
-| Type Hints | Optional | Required (Pydantic) |
-| Server | `flask run` | `uvicorn app:app --reload` |
-| API Docs | Need to add separately | Built-in at `/docs` |
-| Validation | Manual | Automatic (Pydantic models) |
-| Performance | Moderate | Faster (async support) |
-| Error Handling | Manual | Automatic with proper status codes |
+FastAPI is a modern Python web framework that automatically creates interactive API documentation (Swagger UI). It's perfect for building microservices.
+
+---
 
 ## Setup & Run
+
 ```bash
 # Install dependencies
-pip install fastapi uvicorn anthropic requests pydantic
+pip install -r requirements.txt
 
-# Set API key
-export ANTHROPIC_API_KEY="your-key"
+# Set environment variables
+export GOOGLE_API_KEY="your-key"
+export SENDER_EMAIL="your-email@gmail.com"
+export SENDER_PASSWORD="your-app-password"
 
-# Run server
+# Run the server
 python app.py
-# OR
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Server starts at: `http://localhost:8000`
+Server starts at: **http://localhost:8000**
 
-## Swagger UI (Try It Out!)
+---
 
-Open browser to: **http://localhost:8000/docs**
+## Interactive Swagger UI
 
-You'll see:
-- All endpoints listed with descriptions
-- Input/output models
-- "Try it out" button to test endpoints
-- Request/response examples
-- Parameter documentation
+Open your browser to: **http://localhost:8000/docs**
 
-## Test Endpoints via Swagger
+You'll see all API endpoints with a "Try it out" button to test them directly!
 
-### 1. Create Incident
-1. Click "POST /api/incidents"
-2. Click "Try it out"
-3. Enter JSON:
+---
+
+## Testing Your API
+
+### **Option 1: Use Swagger UI (Easiest)**
+
+1. Open **http://localhost:8000/docs**
+2. Click on **"POST /api/incidents"**
+3. Click **"Try it out"** button
+4. Enter this JSON:
+
 ```json
 {
   "customer_id": "99876",
-  "channel": "whatsapp",
-  "message": "My credit card payment was deducted twice yesterday."
+  "channel": "email",
+  "message": "My credit card payment was deducted twice.",
+  "email": "your-email@gmail.com"
 }
 ```
-4. Click "Execute"
-5. See response with incident_id, ticket_id, classification
 
-### 2. Get Incident Details
-1. Click "GET /api/incidents/{incident_id}"
-2. Click "Try it out"
-3. Paste incident_id from previous response
-4. Click "Execute"
+5. Click **"Execute"**
+6. See the response with incident_id and classification
 
-### 3. Get Customer's Incidents
-1. Click "GET /api/incidents/customer/{customer_id}"
-2. Click "Try it out"
-3. Enter customer_id: "99876"
-4. Click "Execute"
+---
 
-### 4. Get Statistics
-1. Click "GET /api/stats"
-2. Click "Try it out"
-3. Click "Execute"
-4. See total_incidents, open_incidents, resolved_incidents, by_classification
+### **Option 2: Use cURL (Command Line)**
 
-### 5. Resolve Incident
-1. Click "PUT /api/incidents/{incident_id}/resolve"
-2. Click "Try it out"
-3. Paste incident_id
-4. Click "Execute"
-
-## Command Line (Alternative to Swagger)
 ```bash
-# Create incident
 curl -X POST http://localhost:8000/api/incidents \
   -H "Content-Type: application/json" \
   -d '{
     "customer_id": "99876",
-    "channel": "whatsapp",
-    "message": "My credit card payment was deducted twice yesterday."
+    "channel": "email",
+    "message": "My credit card payment was deducted twice.",
+    "email": "your-email@gmail.com"
   }'
-
-# Get incident
-curl http://localhost:8000/api/incidents/{incident_id}
-
-# Get customer incidents
-curl http://localhost:8000/api/incidents/customer/99876
-
-# Resolve incident
-curl -X PUT http://localhost:8000/api/incidents/{incident_id}/resolve
-
-# Get stats
-curl http://localhost:8000/api/stats
-
-# Health check
-curl http://localhost:8000/health
 ```
+
+---
 
 ## API Endpoints
 
-### Incidents
-- `POST /api/incidents` - Create incident (Swagger: "Try it out")
-- `GET /api/incidents/{incident_id}` - Fetch incident
-- `GET /api/incidents/customer/{customer_id}` - Customer's incidents
-- `PUT /api/incidents/{incident_id}/resolve` - Mark resolved
+### Create Incident (Main Endpoint)
+**POST** `/api/incidents`
+- Send customer issue
+- Receives: incident_id, ticket_id, classification, confidence
 
-### Notifications
-- `GET /api/notifications/{incident_id}` - Incident notifications
+### Get Incident Details
+**GET** `/api/incidents/{incident_id}`
+- Fetch specific incident
 
-### Statistics
-- `GET /api/stats` - Incident statistics
+### Get Customer's Incidents
+**GET** `/api/incidents/customer/{customer_id}`
+- View all incidents for a customer
 
-### Health
-- `GET /health` - Service health check
+### Resolve Incident
+**PUT** `/api/incidents/{incident_id}/resolve`
+- Mark incident as resolved
 
-## Swagger Features
+### Get Notifications
+**GET** `/api/notifications/{incident_id}`
+- View all notifications sent for incident
 
-**Request/Response Models:**
-- Click any endpoint → see input/output structure
-- Hover over fields → see descriptions and examples
-- Pydantic auto-validates before sending
+### Get Statistics
+**GET** `/api/stats`
+- Total incidents, open incidents, resolved incidents, breakdown by category
 
-**Try It Out:**
-- Pre-fill example data
-- Execute and see live responses
-- View curl command equivalent
-- See response status codes
+### Health Check
+**GET** `/health`
+- Check if service is running
 
-**Documentation:**
-- Every endpoint has description
-- Every parameter documented
-- Example values shown
+---
 
-## FastAPI Advantages
+## Example Responses
 
-✅ **Auto Documentation** - No manual OpenAPI/Swagger setup
+### Create Incident Response (201 Created)
+```json
+{
+  "incident_id": "e5ec9684-ca72-4115-bcad-8c3f833f3a34",
+  "ticket_id": "TKT-98042a72",
+  "status": "open",
+  "classification": "duplicate_payment",
+  "confidence": 0.98,
+  "message": "Incident received and ticket created. Acknowledgments sent via email and SMS."
+}
+```
+
+### Get Statistics Response
+```json
+{
+  "total_incidents": 5,
+  "open_incidents": 2,
+  "resolved_incidents": 3,
+  "by_classification": [
+    {"category": "duplicate_payment", "count": 2},
+    {"category": "fraud_report", "count": 1},
+    {"category": "refund_request", "count": 2}
+  ]
+}
+```
+
+---
+
+## What Happens Behind the Scenes
+
+When you POST to `/api/incidents`:
+
+1. **Validate** - Check all required fields are present
+2. **Classify** - Google Gemini AI analyzes the message
+3. **Create Ticket** - Generate ticket ID
+4. **Store** - Save incident in SQLite database
+5. **Notify** - Send email + SMS notifications
+6. **Schedule Reminder** - Set 24-hour follow-up (configurable for testing)
+
+---
+
+## Console Output
+
+Watch the terminal for detailed logs:
+
+```
+======================================================================
+[INCIDENT RECEIVED] ID: e5ec9684-ca72-4115-bcad-8c3f833f3a34
+Customer: 99876 | Channel: email
+Message: My credit card payment was deducted twice.
+======================================================================
+
+[STEP 1] Classifying incident with Google Gemini...
+✓ Category: duplicate_payment
+✓ Confidence: 0.98
+✓ Reason: Charged twice
+
+[STEP 2] Creating ticket...
+✓ Ticket created: TKT-98042a72
+
+[STEP 3] Storing incident in database...
+✓ Incident stored
+
+[STEP 4] Sending multi-channel notifications...
+✅ Email sent successfully to your-email@gmail.com
+📱 SMS (Mock): Thank you for reporting...
+
+[STEP 5] Scheduling 24-hour reminder...
+✓ Reminder scheduled
+
+[SUCCESS] Response: {...}
+```
+
+---
+
+## Testing Flow
+
+### **Test 1: Duplicate Payment**
+```json
+{
+  "customer_id": "99876",
+  "channel": "email",
+  "message": "I was charged twice for my subscription",
+  "email": "test@example.com"
+}
+```
+Expected: `duplicate_payment` with high confidence (0.9+)
+
+### **Test 2: Fraud Report**
+```json
+{
+  "customer_id": "55555",
+  "channel": "email",
+  "message": "I see unauthorized transaction I didn't make",
+  "email": "test@example.com"
+}
+```
+Expected: `fraud_report` with high confidence (0.9+)
+
+### **Test 3: Refund Request**
+```json
+{
+  "customer_id": "77777",
+  "channel": "sms",
+  "message": "I want a refund for this charge",
+  "email": "test@example.com"
+}
+```
+Expected: `refund_request` with high confidence (0.85+)
+
+---
+
+## Database Queries
+
+After creating incidents, check the database:
+
+```bash
+sqlite3 incidents.db
+
+# View all incidents
+sqlite> SELECT customer_id, classification, confidence FROM incidents;
+
+# View notifications
+sqlite> SELECT channel, status FROM notifications;
+
+# Exit
+sqlite> .quit
+```
+
+---
+
+## Common Issues
+
+### Issue: Email not sending
+**Solution:** Check `.env` file has `SENDER_EMAIL` and `SENDER_PASSWORD`
+
+### Issue: "Google Gemini API Error"
+**Solution:** Verify `GOOGLE_API_KEY` in `.env`
+
+### Issue: Port 8000 already in use
+**Solution:** 
+```bash
+lsof -i :8000
+kill -9 <PID>
+```
+
+Or edit `app.py` last line:
+```python
+uvicorn.run(app, host="0.0.0.0", port=8001)
+```
+
+---
+
+## Why FastAPI?
+
+✅ **Auto Swagger Docs** - No manual setup needed
 ✅ **Type Safety** - Pydantic validates all inputs
-✅ **Async Support** - Can use `async def` for better performance
-✅ **Better Errors** - Auto 400/422 with validation details
-✅ **Faster** - Uvicorn + async = better throughput
-✅ **Modern** - Built for modern Python (3.7+)
+✅ **Fast** - One of the fastest Python frameworks
+✅ **Easy Testing** - Built-in "Try it out" buttons
+✅ **Production Ready** - Used by top companies
 
-## For Interview
-
-"I switched from Flask to FastAPI because:
-- Auto-generated Swagger docs (no manual setup)
-- Built-in data validation with Pydantic
-- Async support for better concurrency
-- Better developer experience with type hints
-- Automatic proper HTTP status codes"
-
-## ReDoc (Alternative Documentation)
-
-Open: **http://localhost:8000/redoc**
-
-Same documentation, different UI. Choose whichever you prefer.
+---
 
 ## Next Steps
 
-1. Run `python app.py`
-2. Open http://localhost:8000/docs
-3. Try endpoints via Swagger UI
-4. Watch console for detailed logs
-5. Check database with `sqlite3 incidents.db`
+1. ✅ Run `python app.py`
+2. ✅ Open http://localhost:8000/docs
+3. ✅ Test endpoints via Swagger UI
+4. ✅ Check console for detailed logs
+5. ✅ View database with DB Browser or SQLite
+
+---
+
+**Happy Testing!** 🎉
