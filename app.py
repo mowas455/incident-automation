@@ -145,7 +145,7 @@ init_db()
 # MOCK NOTIFICATION SYSTEM
 # ============================================================================
 
-def send_notification(incident_id: str, channel: str, message: str, customer_email: str = None) -> str:
+def send_notification(incident_id: str, ticket_id: str, channel: str, message: str, customer_email: str = None) -> str:
     """Send notifications across different channels"""
     notification_id = str(uuid.uuid4())
 
@@ -160,7 +160,7 @@ def send_notification(incident_id: str, channel: str, message: str, customer_ema
 
     # Send actual notification based on channel
     if channel.lower() == 'email' and customer_email:
-        send_email(customer_email, incident_id, message)
+        send_email(customer_email, incident_id, ticket_id, message)  # ← Added ticket_id
     elif channel.lower() == 'sms':
         send_sms_mock(message)
     elif channel.lower() == 'whatsapp':
@@ -170,7 +170,7 @@ def send_notification(incident_id: str, channel: str, message: str, customer_ema
     return notification_id
 
 
-def send_email(recipient_email: str, incident_id: str, message: str) -> bool:
+def send_email(recipient_email: str, incident_id: str, ticket_id: str, message: str) -> bool:
     """Send actual email to customer"""
     try:
         sender_email = os.getenv("SENDER_EMAIL")
@@ -180,25 +180,54 @@ def send_email(recipient_email: str, incident_id: str, message: str) -> bool:
             print(f"⚠️  Email credentials not configured in .env")
             return False
 
-        # Create email
-        subject = f"Incident Update - Ticket {incident_id}"
+        # Create professional email
+        subject = f"Support Ticket #{ticket_id} - Issue Received"
 
-        body = f"""
-        Hello,
-        
-                Message:{message}
-    
-            We will follow up with you within 24 hours.
+        body = f"""Hello,
 
-        Best regards,
-        Customer Support Team
-        """
+Thank you for reaching out to us. We have received your support request and we're here to help.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TICKET DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ticket ID: {ticket_id}
+Incident Reference: {incident_id}
+Status: Open (Under Investigation)
+Received: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR ISSUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{message}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEXT STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Our team is reviewing your case
+✓ We will investigate the issue thoroughly
+✓ You will receive an update within 24 hours
+✓ Keep your ticket ID handy for reference
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you need to provide additional information, please reply to this email with your ticket ID: {ticket_id}
+
+We appreciate your patience and will resolve this as quickly as possible.
+
+Best regards,
+Customer Support Team
+support@company.com"""
 
         # Setup email
-        msg = MIMEMultipart()
+        msg = MIMEMultipart('alternative')
         msg['From'] = sender_email
         msg['To'] = recipient_email
         msg['Subject'] = subject
+
+        # Attach plain text
         msg.attach(MIMEText(body, 'plain'))
 
         # Send email via Gmail SMTP
@@ -216,7 +245,6 @@ def send_email(recipient_email: str, incident_id: str, message: str) -> bool:
     except Exception as e:
         print(f"❌ Email Error: {e}")
         return False
-
 
 def send_sms_mock(message: str) -> bool:
     """Mock SMS sending (for production, use Twilio)"""
@@ -238,17 +266,11 @@ def send_multi_channel(incident_id: str, customer_id: str,
     if channels is None:
         channels = ['email', 'sms']
 
-    message = f"""
-    Thank you for reporting this issue.
-
-    We've created ticket #{ticket_id} and our team is investigating.
-    We'll follow up within 24 hours.
-
-    Reference: Incident {incident_id}
-    """
+    message = (f"Payment issue reported. Ticket #{ticket_id} created. Our team is investigating."
+               f" We will contact you within 24 hours.")
 
     for channel in channels:
-        send_notification(incident_id, channel, message, customer_email=customer_email)
+        send_notification(incident_id, ticket_id, channel, message, customer_email=customer_email)  # ← Added ticket_id
 
 ## ============================================================================
 # Sentiment Analysis
@@ -434,13 +456,14 @@ def create_ticket_mock(incident_id: str, classification: str, message: str) -> s
 reminder_threads = {}
 
 
-def schedule_24h_reminder(incident_id: str, c_email: str, channel: str):
-    """Schedule a reminder after 24 hours if ticket remains open"""
+def schedule_24h_reminder(incident_id: str, c_email: str, channel: str, ticket_id: str):
+    """Schedule a 24-hour reminder for unresolved incidents"""
 
     def check_and_remind():
         time.sleep(86400)  # Wait 24 hours
         # time.sleep(40)
 
+        # Check if incident still open
         conn = sqlite3.connect('incidents.db')
         c = conn.cursor()
         c.execute('SELECT status FROM incidents WHERE id = ?', (incident_id,))
@@ -448,12 +471,12 @@ def schedule_24h_reminder(incident_id: str, c_email: str, channel: str):
         conn.close()
 
         if row and row[0] == 'open':
-            reminder_msg = f"""
-            Reminder: Your support ticket {incident_id} is still open.
-            We're working on resolving your issue. Thank you for your patience.
-            """
-            send_notification(incident_id, channel, reminder_msg, customer_email=c_email)
+            reminder_msg = f"Reminder: Your ticket #{ticket_id} is still open. We're working on resolving your issue."
 
+            # CORRECT call with ticket_id
+            send_notification(incident_id, ticket_id, channel, reminder_msg, customer_email=c_email)
+
+            # Mark reminder as sent
             conn = sqlite3.connect('incidents.db')
             c = conn.cursor()
             c.execute('UPDATE incidents SET reminder_sent = 1 WHERE id = ?', (incident_id,))
@@ -462,7 +485,6 @@ def schedule_24h_reminder(incident_id: str, c_email: str, channel: str):
 
     thread = threading.Thread(target=check_and_remind, daemon=True)
     thread.start()
-    reminder_threads[incident_id] = thread
 
 
 # ============================================================================
@@ -561,7 +583,7 @@ async def create_incident(incident_data: IncidentRequest):
 
     # Step 6: Schedule 24-hour reminder
     print("\n[STEP 6] Scheduling 24-hour reminder...")
-    schedule_24h_reminder(incident_id, incident_data.email, channel)
+    schedule_24h_reminder(incident_id, incident_data.email, channel, ticket_id)  # ← Add ticket_id
     print("✓ Reminder scheduled")
 
     response = {
@@ -582,18 +604,32 @@ async def get_incident(incident_id: str):
     """Fetch incident details by ID"""
     conn = sqlite3.connect('incidents.db')
     c = conn.cursor()
-    c.execute('SELECT * FROM incidents WHERE id = ?', (incident_id,))
+
+    # SELECT in EXACT database column order
+    c.execute('''SELECT id, customer_id, channel, message, classification, confidence,
+                        sentiment, polarity, ticket_id, status, created_at, resolved_at, reminder_sent
+                 FROM incidents WHERE id = ?''', (incident_id,))
     row = c.fetchone()
     conn.close()
 
     if not row:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    columns = ['id', 'customer_id', 'channel', 'message', 'classification',
-               'confidence', 'ticket_id', 'status', 'created_at', 'resolved_at', 'reminder_sent']
-    incident = dict(zip(columns, row))
-
-    return incident
+    return IncidentDetail(
+        id=row[0],
+        customer_id=row[1],
+        channel=row[2],
+        message=row[3],
+        classification=row[4],
+        confidence=row[5],
+        sentiment=row[6],
+        polarity=row[7],
+        ticket_id=row[8],
+        status=row[9],
+        created_at=row[10],
+        resolved_at=row[11],
+        reminder_sent=row[12]
+    )
 
 
 @app.get("/api/incidents/customer/{customer_id}", response_model=List[IncidentDetail], tags=["Incidents"])
@@ -601,13 +637,32 @@ async def get_customer_incidents(customer_id: str):
     """Fetch all incidents for a specific customer"""
     conn = sqlite3.connect('incidents.db')
     c = conn.cursor()
-    c.execute('SELECT * FROM incidents WHERE customer_id = ? ORDER BY created_at DESC', (customer_id,))
+
+    # SELECT in EXACT database column order
+    c.execute('''SELECT id, customer_id, channel, message, classification, confidence,
+                        sentiment, polarity, ticket_id, status, created_at, resolved_at, reminder_sent
+                 FROM incidents WHERE customer_id = ? ORDER BY created_at DESC''', (customer_id,))
     rows = c.fetchall()
     conn.close()
 
-    columns = ['id', 'customer_id', 'channel', 'message', 'classification',
-               'confidence', 'ticket_id', 'status', 'created_at', 'resolved_at', 'reminder_sent']
-    incidents = [dict(zip(columns, row)) for row in rows]
+    incidents = []
+    for row in rows:
+        incident = IncidentDetail(
+            id=row[0],
+            customer_id=row[1],
+            channel=row[2],
+            message=row[3],
+            classification=row[4],
+            confidence=row[5],
+            sentiment=row[6],
+            polarity=row[7],
+            ticket_id=row[8],
+            status=row[9],
+            created_at=row[10],
+            resolved_at=row[11],
+            reminder_sent=row[12]
+        )
+        incidents.append(incident)
 
     return incidents
 
@@ -634,12 +689,23 @@ async def get_incident_notifications(incident_id: str):
     """Fetch all notifications for an incident"""
     conn = sqlite3.connect('incidents.db')
     c = conn.cursor()
-    c.execute('SELECT * FROM notifications WHERE incident_id = ? ORDER BY sent_at DESC', (incident_id,))
+    c.execute(
+        'SELECT id, incident_id, channel, message, status, sent_at FROM notifications WHERE incident_id = ? ORDER BY sent_at DESC',
+        (incident_id,))
     rows = c.fetchall()
     conn.close()
 
-    columns = ['id', 'incident_id', 'channel', 'message', 'status', 'sent_at']
-    notifications = [dict(zip(columns, row)) for row in rows]
+    notifications = [
+        NotificationRecord(
+            id=row[0],
+            incident_id=row[1],
+            channel=row[2],
+            message=row[3],
+            status=row[4],
+            sent_at=row[5]
+        )
+        for row in rows
+    ]
 
     return notifications
 
@@ -671,7 +737,6 @@ async def get_stats():
         "resolved_incidents": resolved_incidents,
         "by_classification": classification_stats
     }
-
 
 # ============================================================================
 # RUN SERVER

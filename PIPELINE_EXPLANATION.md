@@ -18,7 +18,26 @@
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 2: LLM CLASSIFICATION (Google Gemini)                             │
+│  STEP 2: SENTIMENT ANALYSIS (VADER)                                     │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │ Input: "My credit card was charged twice"                          │ │
+│  │ Library: NLTK VADER (Valence Aware Dictionary sEntiment Reasoner)  │ │
+│  │ Analyzes: Emotion, intensity, punctuation (!!! ???)               │ │
+│  │ Output:                                                             │ │
+│  │ {                                                                   │ │
+│  │   "sentiment": "negative",                                         │ │
+│  │   "compound": -0.57,       # -1.0 (very negative) to +1.0 (positive)
+│  │ }                                                                   │ │
+│  │ Classification:                                                     │ │
+│  │ - negative (< -0.1): Angry, frustrated customer                   │ │
+│  │ - neutral (-0.1 to 0.1): Factual, professional tone               │ │
+│  │ - positive (> 0.1): Happy, grateful customer                      │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+└────────────────────┬────────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  STEP 3: LLM CLASSIFICATION (Google Gemini)                             │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │ Input: "My credit card was charged twice"                          │ │
 │  │ API: Google Gemini 2.0 Flash (FREE)                               │ │
@@ -34,7 +53,7 @@
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 3: CREATE TICKET                                                  │
+│  STEP 4: CREATE TICKET                                                  │
 │  - POST to external API (reqres.in/api/tickets - for demo)             │
 │  - Send: incident_id, category, message                                 │
 │  - Receive: ticket_id (e.g., "5678")                                   │
@@ -43,9 +62,10 @@
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 4: STORE IN DATABASE (SQLite)                                     │
+│  STEP 5: STORE IN DATABASE (SQLite)                                     │
 │  - INSERT into incidents table:                                         │
 │    * incident_id, customer_id, message                                 │
+│    * sentiment, polarity (from VADER)                                  │
 │    * classification, confidence, ticket_id                              │
 │    * status = "open", created_at = NOW                                 │
 │  - All data persisted for audit trail                                  │
@@ -53,12 +73,12 @@
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 5: MULTI-CHANNEL NOTIFICATIONS                                    │
+│  STEP 6: MULTI-CHANNEL NOTIFICATIONS                                    │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │ EMAIL (REAL): Sent via Gmail SMTP                              │   │
 │  │   To: customer@example.com                                      │   │
-│  │   Subject: "Incident Update - Ticket TKT-xxx"                  │   │
-│  │   Body: Incident ID, Ticket #, Follow-up in 24h               │   │
+│  │   Subject: "Support Ticket #TKT-xxx - Issue Received"          │   │
+│  │   Body: Professional template with ticket details              │   │
 │  │                                                                 │   │
 │  │ SMS (MOCK): Simulated                                          │   │
 │  │   "Ticket #TKT-xxx created. Follow-up in 24 hours."            │   │
@@ -73,10 +93,11 @@
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 6: SCHEDULE 24-HOUR REMINDER                                      │
+│  STEP 7: SCHEDULE 24-HOUR REMINDER                                      │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │ Background Thread (Daemon):                                        │ │
 │  │ 1. Sleep for 86400 seconds (24 hours)                             │ │
+│  │    [40 seconds for testing, configurable]                         │ │
 │  │ 2. Query DB: SELECT status FROM incidents WHERE id = incident_id   │ │
 │  │ 3. If status == "open":                                            │ │
 │  │    - Send reminder email to customer                              │ │
@@ -98,7 +119,7 @@
 │    "status": "open",                                                     │
 │    "classification": "duplicate_payment",                                │
 │    "confidence": 0.98,                                                   │
-│    "message": "Ticket created. Email sent."                              │
+│    "message": "Incident received. Sentiment: negative. Email sent."      │
 │  }                                                                       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -120,7 +141,29 @@ async def create_incident(incident_data: IncidentRequest):
     incident_id = str(uuid.uuid4())                # Generate unique ID
 ```
 
-### Step 2: LLM Classification with Google Gemini
+### Step 2: Sentiment Analysis with VADER
+
+```python
+sentiment_result = analyze_sentiment(message)
+# Uses NLTK VADER (Valence Aware Dictionary and sEntiment Reasoner)
+# Returns: {"sentiment": "negative", "compound": -0.57}
+
+sentiment = sentiment_result['sentiment']         # "negative"
+polarity = sentiment_result['compound']           # -0.57
+```
+
+**Sentiment Scoring:**
+- **Negative** (< -0.1): Angry, frustrated, upset customer → Escalate
+- **Neutral** (-0.1 to 0.1): Professional, factual tone → Standard handling
+- **Positive** (> 0.1): Happy, grateful, satisfied customer → Standard handling
+
+**Why VADER over TextBlob:**
+- Handles capitalization (URGENT!)
+- Understands punctuation (!!! ???)
+- Recognizes emoji 😡
+- Better for social media & customer messages (85%+ accuracy)
+
+### Step 3: LLM Classification with Google Gemini
 
 ```python
 classification_result = classify_incident(message)
@@ -147,7 +190,7 @@ Respond ONLY with JSON:
 {"category": "...", "confidence": 0.95, "reason": "..."}
 ```
 
-### Step 3: Create Ticket
+### Step 4: Create Ticket
 
 ```python
 ticket_id = create_ticket_mock(incident_id, category, message)
@@ -156,26 +199,26 @@ ticket_id = create_ticket_mock(incident_id, category, message)
 # If fails: generates fallback "TKT-abc123"
 ```
 
-### Step 4: Store in Database
+### Step 5: Store in Database
 
 ```python
 conn = sqlite3.connect('incidents.db')
 c = conn.cursor()
 c.execute('''INSERT INTO incidents 
-             (id, customer_id, channel, message, classification, 
-              confidence, ticket_id, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'open')''',
-         (incident_id, customer_id, channel, message, category, 
-          confidence, ticket_id))
+             (id, customer_id, channel, message, classification, confidence,
+              sentiment, polarity, ticket_id, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')''',
+         (incident_id, customer_id, channel, message, category, confidence,
+          sentiment, polarity, ticket_id))
 conn.commit()
 ```
 
-**incidents Table:**
-| id | customer_id | channel | classification | confidence | ticket_id | status |
-|----|---|---|---|---|---|---|
-| e5f7a2b1 | 99876 | email | duplicate_payment | 0.98 | TKT-98042a72 | open |
+**incidents Table (13 columns):**
+| id | customer_id | channel | message | classification | confidence | sentiment | polarity | ticket_id | status | created_at | resolved_at | reminder_sent |
+|----|---|---|---|---|---|---|---|---|---|---|---|---|
+| e5f7a2b1 | 99876 | email | Charged twice | duplicate_payment | 0.98 | negative | -0.57 | TKT-98042a72 | open | 2025-11-09 10:30:00 | null | 0 |
 
-### Step 5: Multi-Channel Notifications
+### Step 6: Multi-Channel Notifications
 
 ```python
 send_multi_channel(incident_id, customer_id, ticket_id, 
@@ -194,37 +237,60 @@ send_multi_channel(incident_id, customer_id, ticket_id,
 ```
 From: your-email@gmail.com
 To: customer@example.com
-Subject: Incident Update - Ticket TKT-98042a72
+Subject: Support Ticket #TKT-98042a72 - Issue Received
 
 Hello,
 
-Thank you for reporting this issue to us.
+Thank you for reaching out to us. We have received your support request and we're here to help.
 
-Incident ID: e5f7a2b1-4c8d-...
-Status: Your ticket has been created and is being investigated.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TICKET DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Message:
+Ticket ID: TKT-98042a72
+Incident Reference: e5f7a2b1-4c8d-...
+Status: Open (Under Investigation)
+Received: November 09, 2025 at 10:30 AM
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR ISSUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 My credit card payment was deducted twice yesterday.
 
-We will follow up with you within 24 hours.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEXT STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Our team is reviewing your case
+✓ We will investigate the issue thoroughly
+✓ You will receive an update within 24 hours
+✓ Keep your ticket ID handy for reference
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you need to provide additional information, please reply to this email with your ticket ID: TKT-98042a72
+
+We appreciate your patience and will resolve this as quickly as possible.
 
 Best regards,
 Customer Support Team
+support@company.com
 ```
 
 **notifications Table:**
 | id | incident_id | channel | message | status | sent_at |
 |----|---|---|---|---|---|
-| abc123 | e5f7a2b1 | email | Thank you for... | sent | 2025-11-05 10:30:01 |
-| def456 | e5f7a2b1 | sms | Thank you for... | sent | 2025-11-05 10:30:02 |
+| abc123 | e5f7a2b1 | email | Thank you for... | sent | 2025-11-09 10:30:01 |
+| def456 | e5f7a2b1 | sms | Thank you for... | sent | 2025-11-09 10:30:02 |
 
-### Step 6: Schedule 24-Hour Reminder
+### Step 7: Schedule 24-Hour Reminder
 
 ```python
-schedule_24h_reminder(incident_id, incident_data.email, channel)
+schedule_24h_reminder(incident_id, incident_data.email, channel, ticket_id)
 
 # Background thread:
-# - Waits 86400 seconds (24 hours)
+# - Waits 86400 seconds (24 hours) or 40 seconds for testing
 # - Checks if incident still "open"
 # - If open: sends reminder email
 # - Updates reminder_sent = 1
@@ -250,25 +316,29 @@ schedule_24h_reminder(incident_id, incident_data.email, channel)
    - incident_id = "e5f7a2b1-4c8d-..."
    - Validate all fields present
 
-2. **Classify with Gemini** (500-1000ms)
+2. **Analyze Sentiment** (50-100ms)
+   - VADER analyzes message
+   - Returns: `{"sentiment": "negative", "compound": -0.57}`
+
+3. **Classify with Gemini** (500-1000ms)
    - Gemini analyzes message
    - Returns: `{"category": "duplicate_payment", "confidence": 0.98}`
 
-3. **Create Ticket** (200-500ms)
+4. **Create Ticket** (200-500ms)
    - POST to reqres.in
    - ticket_id = "98042a72"
 
-4. **Store in DB** (50ms)
-   - INSERT 1 row into incidents table
+5. **Store in DB** (50ms)
+   - INSERT 1 row into incidents table (with sentiment & polarity)
    - status = "open"
 
-5. **Send Notifications** (1000-2000ms)
+6. **Send Notifications** (1000-2000ms)
    - Email: Real email via SMTP sent to customer@example.com
    - SMS: Mock notification logged
 
-6. **Schedule Reminder** (10ms)
+7. **Schedule Reminder** (10ms)
    - Background thread spawned
-   - Will wake up in 24 hours
+   - Will wake up in 24 hours (or 40s for testing)
 
 **Total Time: ~2-4 seconds**
 
@@ -280,7 +350,7 @@ schedule_24h_reminder(incident_id, incident_data.email, channel)
   "status": "open",
   "classification": "duplicate_payment",
   "confidence": 0.98,
-  "message": "Incident received and ticket created. Acknowledgments sent via email and SMS."
+  "message": "Incident received and ticket created. Sentiment: negative. Acknowledgments sent via email and SMS."
 }
 ```
 
@@ -292,18 +362,53 @@ id: e5f7a2b1-4c8d-...
 customer_id: 99876
 channel: email
 message: "My credit card payment was deducted twice yesterday."
+sentiment: negative
+polarity: -0.57
 classification: duplicate_payment
 confidence: 0.98
 ticket_id: TKT-98042a72
 status: open
-created_at: 2025-11-05 10:30:00
+created_at: 2025-11-09 10:30:00
 reminder_sent: 0
 ```
 
 notifications table:
 ```
-[1] id: abc123, channel: email,  sent_at: 2025-11-05 10:30:01
-[2] id: def456, channel: sms,    sent_at: 2025-11-05 10:30:02
+[1] id: abc123, channel: email,  sent_at: 2025-11-09 10:30:01
+[2] id: def456, channel: sms,    sent_at: 2025-11-09 10:30:02
+```
+
+**Console Output:**
+```
+======================================================================
+[INCIDENT RECEIVED] ID: e5f7a2b1-4c8d-...
+Customer: 99876 | Channel: email
+Message: My credit card payment was deducted twice yesterday.
+======================================================================
+
+[STEP 1] Analyzing customer sentiment...
+✓ Sentiment: negative (polarity: -0.57)
+
+[STEP 2] Classifying incident with Google Gemini...
+✓ Category: duplicate_payment
+✓ Confidence: 0.98
+✓ Reason: deducted twice
+
+[STEP 3] Creating ticket...
+✓ Ticket created: TKT-98042a72
+
+[STEP 4] Storing incident in database...
+✓ Incident stored
+
+[STEP 5] Sending multi-channel notifications...
+✅ Email sent successfully to customer@example.com
+[EMAIL] Sent to customer: Payment issue reported...
+📱 SMS (Mock): Payment issue reported...
+
+[STEP 6] Scheduling 24-hour reminder...
+✓ Reminder scheduled
+
+[SUCCESS] Response: {...}
 ```
 
 ---
@@ -312,6 +417,7 @@ notifications table:
 
 | Component | Why This Choice |
 |-----------|---|
+| **VADER Sentiment** | Better than TextBlob: handles caps, punctuation, emoji (85%+ accuracy) |
 | **Google Gemini** | Free, fast, accurate classification (98%+) |
 | **Gmail SMTP** | Real emails to customers (not mock) |
 | **Background Threads** | 24h reminder doesn't block API responses |
@@ -324,6 +430,7 @@ notifications table:
 
 ## Key Features
 
+✅ **Sentiment Analysis** - VADER detects customer emotion (negative/neutral/positive)
 ✅ **AI-Powered Classification** - 98%+ accuracy with Google Gemini
 ✅ **Real Email Notifications** - Customers receive actual emails
 ✅ **Async 24h Reminders** - Background threads don't block API
@@ -337,7 +444,8 @@ notifications table:
 ## Production Readiness
 
 **Currently Demonstrates:**
-- ✅ AI/LLM integration
+- ✅ AI/LLM integration (Google Gemini)
+- ✅ Sentiment analysis (VADER)
 - ✅ Async workflows (background tasks)
 - ✅ Multi-channel orchestration
 - ✅ Error handling & graceful degradation
@@ -360,21 +468,48 @@ notifications table:
 
 ## Testing Quick Reference
 
-### Test Duplicate Payment (40 seconds with reminder)
+### Test 1: Negative Sentiment (Angry Customer)
 ```bash
 curl -X POST http://localhost:8000/api/incidents \
   -H "Content-Type: application/json" \
   -d '{
     "customer_id": "99876",
     "channel": "email",
-    "message": "I was charged twice for my subscription",
+    "message": "I am FURIOUS! I was charged TWICE! This is absolutely ridiculous!",
     "email": "test@example.com"
   }'
 ```
+Expected: `sentiment: "negative"`, `polarity: -0.85+`
+
+### Test 2: Neutral Sentiment (Professional Customer)
+```bash
+curl -X POST http://localhost:8000/api/incidents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "99876",
+    "channel": "email",
+    "message": "I noticed duplicate charges. Please investigate.",
+    "email": "test@example.com"
+  }'
+```
+Expected: `sentiment: "neutral"`, `polarity: -0.1 to 0.1`
+
+### Test 3: Positive Sentiment (Grateful Customer)
+```bash
+curl -X POST http://localhost:8000/api/incidents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "99876",
+    "channel": "email",
+    "message": "Thank you for fixing this so quickly! Excellent service!",
+    "email": "test@example.com"
+  }'
+```
+Expected: `sentiment: "positive"`, `polarity: 0.7+`
 
 ### Check Database After
 ```bash
-sqlite3 incidents.db "SELECT * FROM incidents;"
+sqlite3 incidents.db "SELECT customer_id, sentiment, polarity, classification FROM incidents;"
 sqlite3 incidents.db "SELECT * FROM notifications;"
 ```
 

@@ -52,7 +52,7 @@ You'll see all API endpoints with a "Try it out" button to test them directly!
 ```
 
 5. Click **"Execute"**
-6. See the response with incident_id and classification
+6. See the response with incident_id, classification, AND **sentiment**
 
 ---
 
@@ -76,15 +76,16 @@ curl -X POST http://localhost:8000/api/incidents \
 ### Create Incident (Main Endpoint)
 **POST** `/api/incidents`
 - Send customer issue
-- Receives: incident_id, ticket_id, classification, confidence
+- Analyzes sentiment + classifies with AI
+- Receives: incident_id, ticket_id, classification, confidence, **sentiment**
 
 ### Get Incident Details
 **GET** `/api/incidents/{incident_id}`
-- Fetch specific incident
+- Fetch specific incident with all details including **sentiment & polarity**
 
 ### Get Customer's Incidents
 **GET** `/api/incidents/customer/{customer_id}`
-- View all incidents for a customer
+- View all incidents for a customer with sentiment data
 
 ### Resolve Incident
 **PUT** `/api/incidents/{incident_id}/resolve`
@@ -114,7 +115,26 @@ curl -X POST http://localhost:8000/api/incidents \
   "status": "open",
   "classification": "duplicate_payment",
   "confidence": 0.98,
-  "message": "Incident received and ticket created. Acknowledgments sent via email and SMS."
+  "message": "Incident received and ticket created. Sentiment: negative. Acknowledgments sent via email and SMS."
+}
+```
+
+### Get Incident Response (with Sentiment & Polarity)
+```json
+{
+  "id": "e5ec9684-ca72-4115-bcad-8c3f833f3a34",
+  "customer_id": "99876",
+  "channel": "email",
+  "message": "My credit card payment was deducted twice.",
+  "classification": "duplicate_payment",
+  "confidence": 0.98,
+  "sentiment": "negative",
+  "polarity": -0.57,
+  "ticket_id": "TKT-98042a72",
+  "status": "open",
+  "created_at": "2025-11-09 08:00:00",
+  "resolved_at": null,
+  "reminder_sent": 0
 }
 ```
 
@@ -139,11 +159,12 @@ curl -X POST http://localhost:8000/api/incidents \
 When you POST to `/api/incidents`:
 
 1. **Validate** - Check all required fields are present
-2. **Classify** - Google Gemini AI analyzes the message
-3. **Create Ticket** - Generate ticket ID
-4. **Store** - Save incident in SQLite database
-5. **Notify** - Send email + SMS notifications
-6. **Schedule Reminder** - Set 24-hour follow-up (configurable for testing)
+2. **Analyze Sentiment** - VADER sentiment analysis (positive/negative/neutral)
+3. **Classify** - Google Gemini AI analyzes the message
+4. **Create Ticket** - Generate ticket ID
+5. **Store** - Save incident + sentiment in SQLite database
+6. **Notify** - Send email + SMS notifications
+7. **Schedule Reminder** - Set 24-hour follow-up (configurable for testing)
 
 ---
 
@@ -158,22 +179,25 @@ Customer: 99876 | Channel: email
 Message: My credit card payment was deducted twice.
 ======================================================================
 
-[STEP 1] Classifying incident with Google Gemini...
+[STEP 1] Analyzing customer sentiment...
+✓ Sentiment: negative (polarity: -0.57)
+
+[STEP 2] Classifying incident with Google Gemini...
 ✓ Category: duplicate_payment
 ✓ Confidence: 0.98
 ✓ Reason: Charged twice
 
-[STEP 2] Creating ticket...
+[STEP 3] Creating ticket...
 ✓ Ticket created: TKT-98042a72
 
-[STEP 3] Storing incident in database...
+[STEP 4] Storing incident in database...
 ✓ Incident stored
 
-[STEP 4] Sending multi-channel notifications...
+[STEP 5] Sending multi-channel notifications...
 ✅ Email sent successfully to your-email@gmail.com
 📱 SMS (Mock): Thank you for reporting...
 
-[STEP 5] Scheduling 24-hour reminder...
+[STEP 6] Scheduling 24-hour reminder...
 ✓ Reminder scheduled
 
 [SUCCESS] Response: {...}
@@ -183,38 +207,61 @@ Message: My credit card payment was deducted twice.
 
 ## Testing Flow
 
-### **Test 1: Duplicate Payment**
+### **Test 1: Angry Customer (Negative Sentiment)**
 ```json
 {
   "customer_id": "99876",
   "channel": "email",
-  "message": "I was charged twice for my subscription",
+  "message": "I'm FURIOUS! I was charged twice! This is absolutely ridiculous!",
   "email": "test@example.com"
 }
 ```
-Expected: `duplicate_payment` with high confidence (0.9+)
+Expected: 
+- Classification: `duplicate_payment` (0.98 confidence)
+- Sentiment: `negative` 
+- Polarity: -0.85
 
-### **Test 2: Fraud Report**
+### **Test 2: Professional Customer (Neutral Sentiment)**
 ```json
 {
   "customer_id": "55555",
+  "channel": "email",
+  "message": "I noticed duplicate charges in my account. Please investigate.",
+  "email": "test@example.com"
+}
+```
+Expected: 
+- Classification: `duplicate_payment` (0.97 confidence)
+- Sentiment: `neutral` 
+- Polarity: 0.0
+
+### **Test 3: Fraud Report (Negative Sentiment)**
+```json
+{
+  "customer_id": "77777",
   "channel": "email",
   "message": "I see unauthorized transaction I didn't make",
   "email": "test@example.com"
 }
 ```
-Expected: `fraud_report` with high confidence (0.9+)
+Expected: 
+- Classification: `fraud_report` (0.95+ confidence)
+- Sentiment: `negative`
+- Polarity: -0.65
 
-### **Test 3: Refund Request**
+### **Test 4: Grateful Customer (Positive Sentiment)**
 ```json
 {
-  "customer_id": "77777",
-  "channel": "sms",
-  "message": "I want a refund for this charge",
+  "customer_id": "88888",
+  "channel": "email",
+  "message": "Thank you for fixing my duplicate charge so quickly! Excellent service!",
   "email": "test@example.com"
 }
 ```
-Expected: `refund_request` with high confidence (0.85+)
+Expected: 
+- Classification: `refund_request` or `other` (context dependent)
+- Sentiment: `positive`
+- Polarity: 0.75
 
 ---
 
@@ -225,8 +272,11 @@ After creating incidents, check the database:
 ```bash
 sqlite3 incidents.db
 
-# View all incidents
-sqlite> SELECT customer_id, classification, confidence FROM incidents;
+# View all incidents with sentiment
+sqlite> SELECT customer_id, sentiment, polarity, classification FROM incidents;
+
+# View negative sentiment incidents
+sqlite> SELECT customer_id, sentiment, polarity FROM incidents WHERE sentiment = 'negative';
 
 # View notifications
 sqlite> SELECT channel, status FROM notifications;
@@ -237,6 +287,16 @@ sqlite> .quit
 
 ---
 
+## Sentiment Interpretation
+
+| Sentiment | Polarity Range | Meaning | Example |
+|-----------|--------|---------|---------|
+| **Negative** | -1.0 to -0.1 | Angry, frustrated customer | "FURIOUS!", "disgusted" |
+| **Neutral** | -0.1 to 0.1 | Factual, professional tone | "Please investigate this" |
+| **Positive** | 0.1 to 1.0 | Happy, grateful customer | "Thank you!", "excellent" |
+
+---
+
 ## Common Issues
 
 ### Issue: Email not sending
@@ -244,6 +304,9 @@ sqlite> .quit
 
 ### Issue: "Google Gemini API Error"
 **Solution:** Verify `GOOGLE_API_KEY` in `.env`
+
+### Issue: Sentiment shows "neutral" for everything
+**Solution:** That's normal for mixed messages. Try very negative or positive text to see the difference.
 
 ### Issue: Port 8000 already in use
 **Solution:** 
@@ -269,14 +332,29 @@ uvicorn.run(app, host="0.0.0.0", port=8001)
 
 ---
 
+## Features Demonstrated
+
+✅ **AI Classification** - Google Gemini integration
+✅ **Sentiment Analysis** - VADER NLP for customer emotion detection
+✅ **Real Email** - Gmail SMTP integration
+✅ **Database Design** - SQLite with normalized schema
+✅ **Async Operations** - Background threads for reminders
+✅ **Multi-Channel** - Email, SMS, WhatsApp ready
+✅ **Error Handling** - Graceful degradation
+✅ **Production Patterns** - Scalable architecture
+
+---
+
 ## Next Steps
 
 1. ✅ Run `python app.py`
 2. ✅ Open http://localhost:8000/docs
-3. ✅ Test endpoints via Swagger UI
-4. ✅ Check console for detailed logs
-5. ✅ View database with DB Browser or SQLite
+3. ✅ Test endpoints via Swagger UI (Try different sentiment messages)
+4. ✅ Check console for detailed logs showing sentiment analysis
+5. ✅ View database with: `sqlite3 incidents.db`
 
 ---
 
 **Happy Testing!** 🎉
+
+**Note:** Sentiment analysis uses VADER (Valence Aware Dictionary and sEntiment Reasoner), which is excellent for social media and customer messages. Polarity ranges from -1.0 (very negative) to +1.0 (very positive).
